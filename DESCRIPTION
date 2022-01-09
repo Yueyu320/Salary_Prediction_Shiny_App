@@ -1,0 +1,41 @@
+Package: DataAnalyst
+Title: Predicts(modeling) wage data for analysts
+Version: 0.1.0
+Authors@R: c(
+    person("Jiongran", "Wang", ,"jw770@duke.edu", role = c("aut", "cre")),
+    person("Haoyu", "Jiang", ,"hj149@duke.edu", role = c("aut")),
+    person("Camilla", "Yu", ,"yy330@duke.edu", role = c("aut")),
+    person("Yesen", "Chen", ,"yc507@duke.edu", role = c("aut"))
+    )
+Description: The package scrapes job-related data for analyst-type role in the indeed
+  web page and does exploratory data analysis using different plots. After exploring 
+  the data, the package builds Adaboost model for predicting wages for different jobs by
+  training data using information of jobs (ex: degree, skills, work experience etc.)
+License: MIT + file LICENSE
+Imports:
+    dplyr,
+    magrittr,
+    fastDummies,
+    stringr,
+    shiny,
+    tidyverse,
+    gbm,
+    ggplot2,
+    shinyWidgets,
+    ggthemes,
+    stats,
+    datasets,
+    ggpubr,
+    wordcloud,
+    RColorBrewer,
+    corrplot
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.2
+Depends: 
+    R (>= 2.10)
+Suggests: 
+    rmarkdown,
+    knitr
+VignetteBuilder: knitr

@@ -1,0 +1,1 @@
+utils::globalVariables(c("spark", "job_des", "xml", "."))

@@ -1,0 +1,139 @@
+---
+title: "vignettes"
+output: rmarkdown::pdf_document
+vignette: >
+  %\VignetteIndexEntry{vignettes}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+library(DataAnalyst)
+library(ggplot2)
+library(tidyverse)
+library(ggpubr)
+library(wordcloud)
+library(RColorBrewer)
+```
+
+Indeed is the top 1 job site in the world with over 250 million unique visitors every month. For every 10s, a job is added on Indeed globally. Jobs posting on Indeed includes salary in USD, job description, job title, job location, job type (full time for example) and star-based rating system for reviews of the companies. However, sometimes companies don't provide salaries for applicants. Our goal of this project is to predict hourly salary of analyst-related jobs based on other data from the posting. It can provide a reference for applicants, and help employers to offer appropriate salaries. This project mainly consists five steps: web scraping, data preprocessing, EDA, modeling and predictions.
+
+The first and the most important step is to scrape job data from indeed. Every 15 job postings are on the same page on Indeed. There is no nicely-formatted job posting links on Indeed. Although the prefix of link for each job is the same, the suffix is different, and there is no regularity for suffixes. Therefore, we need to scrape links first and scrape job data based on the links. To scrape links, we need to access the links for each page first. There is regularity for links of pages, we can access all pages by only changing 'start' value (ex: start=0 means the first page, start=10 means the second page). However, we can't scrape job posting links from each page by simply using SelectorGadget: it always returns NA values (might because of nested java scripts). Dr. Rundel provides us a solution with his package `hayalbaz`. Within this package, function `wait_on_load` can wait for the page to load before trying to get the source, and function `get_source` can get the source of each job posting. In the end, we scraped 4500 job data on Indeed.
+
+The second step is to preprocess the scraped raw data. Firstly, we remove rows that have NA values on salary and duplicated values from the data. We use job description as the identifier of duplication, that is if we find duplication of job description, then the data is duplicated. It turns out that there are only 645 rows of the data remaining. We suspect that Indeed might repeatedly post the same jobs after a while to make the jobs noticeable.
+
+Then we extract values that are important for prediction. For job title, we simply decide if the job are related to data analysts and create another new variable called `data` with binary values (ex: 1 means the job is related to data analyst). For job location, we extract the abbreviation of states of the location and divide states into four parts: West, Midwest, South and Northeast. For reviews of the companies, we extract the number of reviews as an indicator of the popularity of the company. For salary, we extract the maximum of the salary and convert all kinds of salaries (ex: yearly, monthly, weekly, daily) to hourly basis. The most difficult part is the process of the job description, because it does not have uniform format, and the length of job description makes it even harder to extract information. There are some assumptions that we need to make to simplify this process. We assume that pattern "number + years" implies the required working experience for jobs by observing many job postings on Indeed. The number mentioned above could be either numeric or text version. We choose the maximum of all the numbers matching this pattern as the required working experience. We also assume that skills and academic degrees only have a few expressions in the job description. For example, bachelor's degree is expressed by either BA, BS or Bachelor in the job descriptions. With this assumption, we detect the required academic degree to be either bachelor, master, PhD or not specified. Some jobs may require multiple academic degrees, we select the highest one to be the required academic degree since job postings including higher degrees might attract more candidates with higher degree to apply, which increases the difficulty of getting the job thus further implies higher salaries. We also detect if the job requires certain skills, such as python, java, communication skills and etc.
+
+The third step is to do EDA (Exploratory Data Analysis) on the processed data.
+
+We try to find out the distribution of numeric variables: `salary` and required `working experience`.
+
+```{r}
+tidydata <- DataAnalyst::tidy_data
+salary=tidy_data %>%
+  ggplot(aes(x = salary)) +
+  geom_histogram(bins=30)
+year=tidy_data %>%
+  ggplot(aes(x = working_years)) +
+  geom_histogram(bins=30)
+
+ggarrange(salary, year, nrow = 2)
+```
+
+The above plots are histogram of salary and histogram of required working years respectively. The distribution of salary is left-skewed, with most salaries distributed between 25 and 50. Most required working years lie between 0 and 5, and about 40% of the companies do not require working experience. 
+
+```{r}
+cate="etl"
+etl <- data.frame(salary = tidy_data[, "salary"],
+                  var = tidy_data[, cate]) %>%
+    ggplot(aes(x = salary, group = var, fill = var)) +
+    geom_boxplot() +
+    scale_fill_discrete(name = cate)
+cate="java"
+java <- data.frame(salary = tidy_data[, "salary"],
+                  var = tidy_data[, cate]) %>%
+    ggplot(aes(x = salary, group = var, fill = var)) +
+    geom_boxplot() +
+    scale_fill_discrete(name = cate)
+cate="spark"
+spark <- data.frame(salary = tidy_data[, "salary"],
+                  var = tidy_data[, cate]) %>%
+    ggplot(aes(x = salary, group = var, fill = var)) +
+    geom_boxplot() +
+    scale_fill_discrete(name = cate)
+cate="degree"
+degree <- data.frame(salary = tidy_data[, "salary"],
+                  var = tidy_data[, cate]) %>%
+    ggplot(aes(x = salary, group = var, fill = var)) +
+    geom_boxplot() +
+    scale_fill_discrete(name = cate)
+ggarrange(etl, java, spark,degree,ncol = 2, nrow = 2)
+```
+
+We try to find out the relationships between salary and other variables. We find that there are apparent relationships between some variables and salary. We plot side-by-side boxplots of salaries with respect to different variables such as degree, spark (if the job requires spark skill) and java (if the job reqires java skill). It is clear from the boxplots that employers offer higher salaries when they require etl, java and spark. Moreover, higher academic degree requirement implies higher salary offered.
+
+```{r, fig.height=3}
+Bachelor <- tidy_data %>% filter(degree == 1) %>% nrow()
+Master <- tidy_data %>% filter(degree == 2) %>% nrow()
+Phd <- tidy_data %>% filter(degree == 3) %>% nrow()
+skill_freq <- function(skill) {
+  n <- tidy_data %>% filter(skill == 1) %>% nrow()
+  return(n)
+}
+word_data <- data.frame(
+  word = c("Bachelor", "Master", "Phd", "SQL", "Power_BI", "C/C++",
+           "Microsoft", "SAS", "SPSS", "XML", "ETL", "Commu",
+           "Python", "JAVA", "R", "Tableau", "Spark"))
+freq_data <- data.frame(
+  freq = c(Bachelor, Master, Phd, skill_freq(tidy_data$sql), skill_freq(tidy_data$power),
+            skill_freq(tidy_data$c), skill_freq(tidy_data$micro), skill_freq(tidy_data$sas),
+            skill_freq(tidy_data$spss), skill_freq(tidy_data$xml), skill_freq(tidy_data$etl),
+            skill_freq(tidy_data$comm), skill_freq(tidy_data$python), skill_freq(tidy_data$java),
+            skill_freq(tidy_data$r), skill_freq(tidy_data$tableau), skill_freq(tidy_data$spark)
+))
+word_freq <- cbind(word_data, freq_data)
+
+set.seed(1234)
+wordcloud(words = word_freq$word, freq = word_freq$freq, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0, 
+          colors=brewer.pal(8, "Dark2"))
+cate="comm"
+comm <- data.frame(salary = tidy_data[, "salary"],
+                  var = tidy_data[, cate]) %>%
+    ggplot(aes(x = salary, group = var, fill = var)) +
+    geom_boxplot() +
+    scale_fill_discrete(name = cate)
+cate="micro"
+micro <- data.frame(salary = tidy_data[, "salary"],
+                  var = tidy_data[, cate]) %>%
+    ggplot(aes(x = salary, group = var, fill = var)) +
+    geom_boxplot() +
+    scale_fill_discrete(name = cate)
+ggarrange(comm, micro,nrow = 2)
+```
+
+We create a word frequency plot for skills. It turns out that communication skills and Microsoft office skills appear most times in all job descriptions. However, the side-by-side boxplots of salaries with respect to these two skills show that jobs that require these two skills offer lower salaries than jobs 
+that do not. We suspect that this is caused by that jobs requiring communication and Microsoft skills usually do not put too much weights on solid programming skills. However, solid programming skills are keys to high salaries for analysts. Hence, This phenomenon may be consistent with our expectations. 
+
+```{r, fig.height=4}
+tidy_data %>%
+  select(sql:spark, data_analyst) %>%
+  sapply(as.numeric) %>%
+  {. - 1} %>%
+  cor() %>%
+  corrplot::corrplot()
+```
+
+According to the correlation plot, there are some obvious correlation between some pair of features, such as python and sql, data analyst and sql, data analyst and python, r and python. These correlations are consistant with our understanding of requirements for analysts and data analysts.
+
+The fourth step is to build models based on the job data. We tries two different algorithms: random forest and adaboost (adaptive boosting). We split the job data into training dataset (80% of the job data) and test dataset (remaining 20% of the job data). We train both algorithms on the training set and use MSE (mean sqaured error) on the test set to evaluate the performance. The performance of adaboost is much better than that of random forest, so we use adaboost as the algorithm for later prediction function. For adaboost, we use cross validation method for hyperparameter tuning. The hyperparameters for adaboost are the number of trees as well as the depth for each tree. We use cross-validated MSE to evaluate the performance of models with different hyperparameters and decide the optimal choice. Our final models are using adaboost algorithm with the number of trees to be 75 and the depth for each tree to be 4. We also create 100 simulated samples using Bootstrap Method and train models on these samples to get 100 best models for later prediction purpose (we could give users 0%, 25%, 50%, 75% and 100% quantile of estimated hourly wages for the specific job as well as the distribution plot for estimated hourly wages).
+
+The fifth step is to build a package, which has two functions and the job data (give users an example about what our data looks like and they could use it to train other models). The first function asks user to input job description in the string type, if job title is data analyst related or not (only takes "Yes" or "No" as input and it's case sensitive), job location (only takes abbreviations for states in the U.S. or "unknown" as input like NC and it's case sensitive), job type(only takes "Contract", "Full time", "mixed", "Part time", "Per diem"(temporary worker), "Temporary" or "unknown" as input and it's case sensitive), number of reviews of companies where the job is in the numeric type and required academic degrees (only takes "Bachelor", "Master", "NotSpecified" or "PhD" as input and it's case sensitive). This function uses 100 models mentioned above and the inputs to predict 100 values for hourly salary in USD. The outputs of this function will be a list containing a vector (100 predicted hourly wages for the job), minimum, median and maximum of the predicted hourly salary for the job. The second function utilizes `Shiny` to build a frontend for users. We add a background image in the frontend to make it more fancy. In the front end, we take the same inputs as above and return the distribution plot for estimated hourly wages for the specific job and mark 25%, 50% and 75% quantile on the plot. 
