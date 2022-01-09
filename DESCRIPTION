@@ -2,9 +2,9 @@ Package: DataAnalyst
 Title: Predicts(modeling) wage data for analysts
 Version: 0.1.0
 Authors@R: c(
-    person("Jiongran", "Wang", ,"jw770@duke.edu", role = c("aut", "cre")),
+    person("Camilla", "Yu", ,"yy330@duke.edu",role = c("aut", "cre")),
+    person("Jiongran", "Wang", ,"jw770@duke.edu", role = c("aut")),
     person("Haoyu", "Jiang", ,"hj149@duke.edu", role = c("aut")),
-    person("Camilla", "Yu", ,"yy330@duke.edu", role = c("aut")),
     person("Yesen", "Chen", ,"yc507@duke.edu", role = c("aut"))
     )
 Description: The package scrapes job-related data for analyst-type role in the indeed
